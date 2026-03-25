@@ -5,6 +5,7 @@
 **Escáner ofensivo de Local File Disclosure y Directory Traversal**
 
 ![Language](https://img.shields.io/badge/Python-3.8+-9E4AFF?style=flat-square&logo=python&logoColor=white)
+![Version](https://img.shields.io/badge/version-1.1.0-9E4AFF?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-9E4AFF?style=flat-square)
 ![Category](https://img.shields.io/badge/Category-Bug%20Bounty%20%7C%20Pentesting-111111?style=flat-square)
 
@@ -17,21 +18,21 @@
 ```text
 ┌──────────────────────────────────────────────────────┐
 │                                                      │
-│  ██████╗  ██████╗ ███████╗██╗  ██╗                  │
-│  ██╔══██╗██╔════╝ ██╔════╝██║  ██║                  │
-│  ██████╔╝███████╗█████╗  ███████║                  │
-│  ██╔═══╝ ██╔══██╗██╔══╝  ██╔══██║                  │
-│  ██║     ╚██████╔╝███████╗██║  ██║                  │
-│  ╚═╝      ╚═════╝ ╚══════╝╚═╝  ╚═╝                  │
+│  ██████╗  ██████╗ ███████╗██╗  ██╗                │
+│  ██╔══██╗██╔════╝ ██╔════╝██║  ██║                │
+│  ██████╔╝███████╗█████╗  ███████║                │
+│  ██╔═══╝ ██╔══██╗██╔══╝  ██╔══██║                │
+│  ██║     ╚██████╔╝███████╗██║  ██║                │
+│  ╚═╝      ╚═════╝ ╚══════╝╚═╝  ╚═╝                │
 │                                                      │
-│  ██████╗  ██████╗ ██╗ █████╗  ██████╗         │
-│  ██╔══██╗██╔══██╗██║██╔══██╗██╔════╝         │
-│  ██████╔╝██████╔╝██║██║  ██║█████╗           │
-│  ██╔═══╝ ██╔══██╗██║██║  ██║██╔══╝           │
-│  ██║     ██║  ██║██║╚█████╔╝╚██████╗         │
-│  ╚═╝     ╚═╝  ╚═╝╚═╝ ╚════╝  ╚═════╝         │
+│  ██████╗  ██████╗ ██╗ █████╗  ██████╗        │
+│  ██╔══██╗██╔══██╗██║██╔══██╗██╔════╝        │
+│  ██████╔╝██████╔╝██║██║  ██║█████╗          │
+│  ██╔═══╝ ██╔══██╗██║██║  ██║██╔══╝          │
+│  ██║     ██║  ██║██║╚█████╔╝╚██████╗        │
+│  ╚═╝     ╚═╝  ╚═╝╚═╝ ╚════╝  ╚═════╝        │
 │                                                      │
-│    LFD & Directory Traversal scanner                 │
+│    LFD & Directory Traversal scanner  v1.1.0         │
 │    encodings: plain · %2e · doble · unicode · null   │
 │    by theoffsecgirl                                  │
 └──────────────────────────────────────────────────────┘
@@ -71,16 +72,19 @@ pip install requests colorama
 
 ```bash
 # Escaneo con FUZZ
-python3 LFDScanner.py -u "https://example.com/download.php?file=FUZZ"
+python3 pathraider.py -u "https://example.com/download.php?file=FUZZ"
 
 # Con parámetro
-python3 LFDScanner.py -u "https://example.com/get.php" -p file
+python3 pathraider.py -u "https://example.com/get.php" -p file
 
 # Lista de objetivos
-python3 LFDScanner.py -L scope.txt -T 20
+python3 pathraider.py -L scope.txt -T 20
 
 # Exportar JSON
-python3 LFDScanner.py -L scope.txt --json-output resultados.json
+python3 pathraider.py -L scope.txt --json-output resultados.json
+
+# Ver version
+python3 pathraider.py --version
 ```
 
 ---
@@ -98,6 +102,7 @@ python3 LFDScanner.py -L scope.txt --json-output resultados.json
 --insecure         Desactivar verificación TLS
 --json-output      Guardar resultados en JSON
 -v, --verbose      Más información
+    --version      Muestra la versión
 ```
 
 ---
