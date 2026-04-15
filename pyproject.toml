@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pathraider"
+version = "1.1.0"
+description = "Offensive LFD and Directory Traversal scanner with encoding bypass"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "theoffsecgirl", email = "info@theoffsecgirl.com" }]
+keywords = ["security", "bug-bounty", "lfi", "path-traversal", "pentesting"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Security",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "requests",
+    "colorama",
+]
+
+[project.scripts]
+pathraider = "pathraider:main"
+
+[project.urls]
+Homepage = "https://github.com/theoffsecgirl/pathraider"
+Repository = "https://github.com/theoffsecgirl/pathraider"
+"Bug Tracker" = "https://github.com/theoffsecgirl/pathraider/issues"
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
