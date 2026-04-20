@@ -1,62 +1,30 @@
-<div align="center">
-
 # pathraider
 
-**Escáner ofensivo de Local File Disclosure y Directory Traversal**
-
-![Language](https://img.shields.io/badge/Python-3.8+-9E4AFF?style=flat-square&logo=python&logoColor=white)
-![Version](https://img.shields.io/badge/version-1.1.0-9E4AFF?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-9E4AFF?style=flat-square)
-![Category](https://img.shields.io/badge/Category-Bug%20Bounty%20%7C%20Pentesting-111111?style=flat-square)
-
-*by [theoffsecgirl](https://github.com/theoffsecgirl)*
+Escáner ofensivo de Local File Disclosure y Directory Traversal.
 
 > 🇬🇧 [English version](README.md)
-
-</div>
-
----
-
-```text
-┌──────────────────────────────────────────────────────┐
-│                                                      │
-│  ██████╗  ██████╗ ███████╗██╗  ██╗                │
-│  ██╔══██╗██╔════╝ ██╔════╝██║  ██║                │
-│  ██████╔╝███████╗█████╗  ███████║                │
-│  ██╔═══╝ ██╔══██╗██╔══╝  ██╔══██║                │
-│  ██║     ╚██████╔╝███████╗██║  ██║                │
-│  ╚═╝      ╚═════╝ ╚══════╝╚═╝  ╚═╝                │
-│                                                      │
-│  ██████╗  ██████╗ ██╗ █████╗  ██████╗        │
-│  ██╔══██╗██╔══██╗██║██╔══██╗██╔════╝        │
-│  ██████╔╝██████╔╝██║██║  ██║█████╗          │
-│  ██╔═══╝ ██╔══██╗██║██║  ██║██╔══╝          │
-│  ██║     ██║  ██║██║╚█████╔╝╚██████╗        │
-│  ╚═╝     ╚═╝  ╚═╝╚═╝ ╚════╝  ╚═════╝        │
-│                                                      │
-│    LFD & Directory Traversal scanner  v1.1.0         │
-│    encodings: plain · %2e · doble · unicode · null   │
-│    by theoffsecgirl                                  │
-└──────────────────────────────────────────────────────┘
-```
 
 ---
 
 ## ¿Qué hace?
 
-Comprueba si un parámetro de una aplicación web permite leer archivos locales del sistema (LFD / Path Traversal). Genera automáticamente variantes de encoding para bypassear filtros y WAFs.
+Comprueba si un parámetro permite leer archivos locales del sistema (LFD / Path Traversal) generando variantes de traversal y bypass de encoding.
+
+Importante: los findings son candidatos, no vulnerabilidades confirmadas.
 
 ---
 
-## Características
+## Funcionalidades
 
-- Un objetivo (`--url`) o múltiples desde archivo (`--list`)
-- Inyección con marcador `FUZZ` o parámetro configurable (`--param`)
-- **132 rutas de prueba** generadas automáticamente desde 12 rutas base con encodings:
-  - Plain, `%2e%2e%2f`, doble encoding, `..%2f`, backslash, `..%5c`, unicode overlong, `%c0%ae`, null byte
-- Detección heurística de contenido sensible (`/etc/passwd`, `win.ini`, etc.)
-- Escaneo concurrente con hilos
-- Exportación a JSON
+- Un objetivo (`--url`) o múltiples (`--list`)
+- Inyección con `FUZZ` o parámetro (`--param`)
+- Variantes de traversal con múltiples encodings
+- Detección heurística de contenido sensible
+- Escaneo concurrente
+- Output normalizado
+- Exportación JSON / JSONL
+- Modo `stdout` para pipelines
+- Manejo limpio de `Ctrl+C`
 
 ---
 
@@ -65,7 +33,7 @@ Comprueba si un parámetro de una aplicación web permite leer archivos locales 
 ```bash
 git clone https://github.com/theoffsecgirl/pathraider.git
 cd pathraider
-pip install requests colorama
+pip install -e .
 ```
 
 ---
@@ -73,20 +41,19 @@ pip install requests colorama
 ## Uso
 
 ```bash
-# Escaneo con FUZZ
-python3 pathraider.py -u "https://example.com/download.php?file=FUZZ"
+pathraider -u "https://example.com/download.php?file=FUZZ"
+```
 
-# Con parámetro
-python3 pathraider.py -u "https://example.com/get.php" -p file
+### Pipeline
 
-# Lista de objetivos
-python3 pathraider.py -L scope.txt -T 20
+```bash
+pathraider -u "https://target.com/download?file=FUZZ" --format jsonl --stdout | bbcopilot ingest pathraider -
+```
 
-# Exportar JSON
-python3 pathraider.py -L scope.txt --json-output resultados.json
+### Guardar findings
 
-# Ver versión
-python3 pathraider.py --version
+```bash
+pathraider -L scope.txt --format jsonl --findings-output findings.jsonl
 ```
 
 ---
@@ -94,27 +61,39 @@ python3 pathraider.py --version
 ## Parámetros
 
 ```text
--u, --url          URL objetivo (puede contener FUZZ)
--L, --list         Archivo con lista de objetivos
---paths            Rutas de traversal personalizadas
--p, --param        Parámetro sin FUZZ (default: file)
--t, --timeout      Timeout por petición (default: 5)
--T, --threads      Hilos por objetivo (default: 10)
--A, --agent        User-Agent personalizado
---insecure         Desactivar verificación TLS
---json-output      Guardar resultados en JSON
--v, --verbose      Más información
-    --version      Muestra la versión
+-u, --url                URL objetivo (puede contener FUZZ)
+-L, --list               Archivo con objetivos
+--paths                  Rutas personalizadas
+-p, --param              Parámetro (default: file)
+-t, --timeout            Timeout por request
+-T, --threads            Hilos
+-A, --agent              User-Agent
+--insecure               Sin verificación TLS
+--json-output            Informe JSON clásico
+--format json|jsonl      Formato de findings
+--stdout                 Output por stdout
+--findings-output        Guardar findings
+-v, --verbose            Verbose
+--version                Versión
 ```
+
+---
+
+## Notas
+
+- Logs → `stderr`
+- Findings → `stdout`
+- Ctrl+C limpio
+- Pensado para recon y pipelines
 
 ---
 
 ## Uso ético
 
-Solo para bug bounty, laboratorios y auditorías autorizadas.
+Solo para entornos autorizados.
 
 ---
 
 ## Licencia
 
-MIT · [theoffsecgirl](https://theoffsecgirl.com)
+MIT
